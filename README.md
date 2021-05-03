@@ -6,7 +6,7 @@ The CNN is trained on airplane and cat images from the STL10 dataset. After 40 t
 
 ## Steps
 
-1. Train the CNN (You can skip this step and use the pre-trained `stl10_net.pth`)
+### 1. Train the CNN (You can skip this step and use the pre-trained `stl10_net.pth`)
 
 ```bash
 python train.py
@@ -18,7 +18,7 @@ Optional arguments:
 * ``--num_epochs``: Number of training epochs, default is 40.
 * ``--batch_size``: Number of images per batch, default is 64.
 
-2. Attack the CNN
+### 2. Attack the CNN
 
 Compared to the DDN attack provided by Foolbox, this implementation adds:
 - Quantization add the end of each attack iteration
