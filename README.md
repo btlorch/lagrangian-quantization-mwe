@@ -6,7 +6,7 @@ The CNN is trained on airplane and cat images from the STL10 dataset. After 40 t
 
 ## Steps
 
-1. Train the CNN
+1. Train the CNN (You can skip this step and use the pre-trained `stl10_net.pth`)
 
 ```bash
 python train.py
@@ -20,6 +20,11 @@ Optional arguments:
 
 2. Attack the CNN
 
+Compared to the DDN attack provided by Foolbox, this implementation adds:
+- Quantization add the end of each attack iteration
+- Confidence (sometimes called safety margin): An image is adversarial once the logits corresponding to the wrong and the right class differ by some margin.
+- Option to use another loss more similar to the C&W attack. Not used right now.
+
 ```bash
 python attack.py
 ```
@@ -28,7 +33,7 @@ Useful arguments (please look at the script to see all arguments):
 * ``--data_dir``: Directory where to find STL10 images. If this directory does not exist, it will be created and the images will be downloaded automatically.
 * ``--output_dir``: Directory where to store the results as csv file.
 * ``--quantization``: Which method to use for quantization, either "naive_round" or "lagrangian_quantization".
-* ``--confidence``: The attack succeeds after enforcing the given margin between the logits corresponding to the wrong class and the true class. Set to 0 by default. 
+* ``--confidence``: The attack succeeds after enforcing the given margin between the logits corresponding to the wrong class and the true class. Set to 0 by default.
 
 ## Results
 
@@ -44,3 +49,5 @@ Attack 100 test set images. The DDN used 500 steps, and the default hyper-parame
 | --- | --- | --- | --- |
 | 20 | Naive round | 1.0 | 0.02700 |
 | 20 | Lagrangian  | 1.0 | 0.02700 |
+
+The surprising result is that Lagrangian quantization does not outperform naive rounding.

@@ -1,11 +1,7 @@
 #
-# This method extends the Foolbox implementation by the quantization step: https://github.com/bethgelab/foolbox/blob/92af8673ee957e5af1f9ad5f3abb474c63f93397/foolbox/attacks/ddn.py
+# This method extends the Foolbox implementation by a confidence parameter and the quantization step: https://github.com/bethgelab/foolbox/blob/92af8673ee957e5af1f9ad5f3abb474c63f93397/foolbox/attacks/ddn.py
 # Original implementation: https://github.com/jeromerony/adversarial-library/blob/main/adv_lib/attacks/decoupled_direction_norm.py
 #
-from typing import Union, Tuple, Optional, Any
-import math
-import eagerpy as ep
-
 from foolbox.models import Model
 
 from foolbox.criteria import Misclassification, TargetedMisclassification
@@ -119,6 +115,8 @@ class DDNQuantizationAttack(MinimizationAttack):
             raise ValueError("unsupported criterion")
 
         def _is_adversarial(perturbed: ep.Tensor, logits: ep.Tensor) -> ep.Tensor:
+            # Implementation analogously to Foolbox's Carlini & Wagner attack
+
             # For binary classification, this method checks whether
             #   logits[label_true] + confidence < y_pred[label_other]
             # or equivalently
