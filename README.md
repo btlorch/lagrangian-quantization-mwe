@@ -37,7 +37,7 @@ Useful arguments (please look at the script to see all arguments):
 
 ## Results
 
-Attack 100 test set images. The DDN used 500 steps, and the default hyper-parameters (`init_epislon = 1.0`, `gamma = 0.05`).
+Attack 100 test set images. The DDN used 500 steps, and the default hyper-parameters (`init_epsilon = 1.0`, `gamma = 0.05`).
 
 | Confidence | Quantization | Attack success | L2 distortion |
 | --- | --- | --- | --- |
