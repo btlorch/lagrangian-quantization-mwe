@@ -15,9 +15,7 @@ from foolbox.attacks.base import get_criterion
 from foolbox.attacks.base import T
 from foolbox.attacks.base import raise_if_kwargs
 from tqdm import tqdm
-from functools import partial
 from lagrangian_quantization import lagrangian_quantization_ddn
-from foolbox.attacks.carlini_wagner import best_other_classes
 
 
 from typing import Union, Tuple, Optional, Any
@@ -67,13 +65,16 @@ class DDNQuantizationAttack(MinimizationAttack):
     distance = l2
 
     def __init__(
-        self, *, model_torch, preprocessing=None, init_epsilon: float = 1.0, steps: int = 10, gamma: float = 0.05, confidence: float = 0, verbose: int = 0, quantization: str = LAGRANGIAN_QUANTIZATION, loss_type: str = "ce"
+        self, *, model_torch, preprocessing=None, init_epsilon: float = 1.0, steps: int = 10, gamma: float = 0.05, confidence: float = 0, verbose: int = 0, quantization: str = LAGRANGIAN_QUANTIZATION
     ):
         """
         Expects input images in range [0, 1]
-        :param init_epsilon: Initial value for the norm of the attack
+        :param model_torch: PyTorch module
+        :param preprocessing: (Optional) transform that preprocesses images in range [0, 255] to the input range of the model. Used by Lagrangian quantization.
+        :param init_epsilon: Initial value for the norm of the attack's epsilon ball
         :param steps: number of optimization steps
         :param gamma: factor to modify the norm in each iteration
+        :param confidence: The attack succeeds after enforcing the given margin between the logits corresponding to the wrong class and the true class. Set to 0 by default.
         """
         assert quantization in {LAGRANGIAN_QUANTIZATION, NAIVE_ROUND, NO_QUANTIZATION}, "Unknown quantization method"
 
@@ -85,7 +86,6 @@ class DDNQuantizationAttack(MinimizationAttack):
         self.confidence = confidence
         self.verbose = verbose
         self.quantization = quantization
-        self.loss_type = loss_type
 
     def run(
         self,
@@ -134,22 +134,14 @@ class DDNQuantizationAttack(MinimizationAttack):
         max_stepsize = 1.0
         min_, max_ = model.bounds
 
-        rows = range(N)
         def loss_fn(
             inputs: ep.Tensor, labels: ep.Tensor
         ) -> Tuple[ep.Tensor, ep.Tensor]:
             logits = model(inputs)
 
+            # In the untargeted case, our goal is to maximize this loss
             sign = -1.0 if targeted else 1.0
-            if "ce" == self.loss_type:
-                # In the untargeted case, our goal is to maximize this loss
-                loss = sign * ep.crossentropy(logits, labels).sum()
-
-            elif "cw" == self.loss_type:
-                c_minimize = labels
-                c_maximize = best_other_classes(logits, labels)
-                loss = logits[rows, c_minimize] - logits[rows, c_maximize]
-                loss = -sign * loss.sum()
+            loss = sign * ep.crossentropy(logits, labels).sum()
 
             return loss, logits
 
@@ -227,6 +219,7 @@ class DDNQuantizationAttack(MinimizationAttack):
 
                     # Transform perturbation budget from images in [0, 1] to images in [0, 255]
                     transformed_perturbation_budget = perturbation_budget[img_idx].raw * 255
+                    assert (x_org - x_adv_unquantized).square().sum().sqrt() <= transformed_perturbation_budget + 1e-3
 
                     x_quant = lagrangian_quantization_ddn(
                         x_org=x_org,
