@@ -186,21 +186,8 @@ def _quantize_lagrangian(x_org, unquantized_perturbation, g, lambda_):
         torch.ceil(unquantized_perturbation),
         torch.floor(unquantized_perturbation))
 
-    distortion_based_perturbation = torch.where(
-        unquantized_perturbation <= 0,
-        torch.ceil(unquantized_perturbation),
-        torch.floor(unquantized_perturbation)
-    )
-
-    # For pixels with gradient close to zero, use distortion-based quantization
-    perturbation = torch.where(
-        torch.isclose(g, torch.zeros(1, dtype=g.dtype, device=g.device)),
-        distortion_based_perturbation,
-        lagrangian_perturbation
-    )
-
     # Add perturbation onto original image
-    x_quant = x_org + perturbation
+    x_quant = x_org + lagrangian_perturbation
 
     return x_quant
 
