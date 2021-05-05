@@ -37,17 +37,17 @@ Useful arguments (please look at the script to see all arguments):
 
 ## Results
 
-Attack 100 test set images. The DDN used 500 steps, and the default hyper-parameters (`init_epsilon = 1.0`, `gamma = 0.05`).
+Attack 100 test set images with DDN default hyper-parameters (`init_epsilon = 1.0`, `gamma = 0.05`). The table shows the results after running the attack with 100 and 500 iterations. In all cases the attack succeeded.
 
-| Confidence | Quantization | Attack success | L2 distortion |
+| Confidence | Quantization | L2 distortion (100 iterations) | L2 distortion (500 iterations) |
 | --- | --- | --- | --- |
-|  0 | Naive round | 1.0 | 0.00831 |
-|  0 | Lagrangian  | 1.0 | 0.00842 |
+|  0 | Naive round | 0.010359 | 0.008312 |
+|  0 | Lagrangian  | 0.008477 | 0.008418 |
 | --- | --- | --- | --- |
-| 10 | Naive round | 1.0 | 0.01469 |
-| 10 | Lagrangian  | 1.0 | 0.01481 |
+| 10 | Naive round | 0.017106 | 0.014679 |
+| 10 | Lagrangian  | 0.014906 | 0.014811 |
 | --- | --- | --- | --- |
-| 20 | Naive round | 1.0 | 0.02700 |
-| 20 | Lagrangian  | 1.0 | 0.02700 |
+| 20 | Naive round | 0.029708 | 0.026994 |
+| 20 | Lagrangian  | 0.027228 | 0.026998 |
 
-The surprising result is that Lagrangian quantization does not outperform naive rounding.
+Observation: With a limited number of attack iterations, Lagrangian quantization outperforms naive rounding. Given enough attack iterations, naive rounding achieves as low distortion as Lagrangian quantization (on average even slightly lower than Lagrangian quantization).
