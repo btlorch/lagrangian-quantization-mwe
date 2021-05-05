@@ -43,7 +43,7 @@ def attack(args):
     # Set up DDN attack with quantization
     attack = DDNQuantizationAttack(
         model_torch=net,
-        steps=100,
+        steps=args["steps"],
         quantization=args["quantization"],
         confidence=args["confidence"],
         preprocessing=lagrangian_quantization_preprocessing,
@@ -104,6 +104,10 @@ def attack(args):
         next_img_idx += current_batch_size
 
     attack_df = pd.concat(buffer)
+    attack_df["steps"] = attack.steps
+    attack_df["confidence"] = attack.confidence
+    attack_df["init_epsilon"] = attack.init_epsilon
+    attack_df["gamma"] = attack.gamma
 
     return attack_df
 
@@ -116,12 +120,13 @@ if __name__ == "__main__":
     parser.add_argument("--max_num_test_batches", type=int, default=10, help="Maximum number of test batches")
     parser.add_argument("--output_dir", type=str, default="./results", help="Where to store resulting data frame")
     parser.add_argument("--quantization", type=str, default=LAGRANGIAN_QUANTIZATION, choices=[NAIVE_ROUND, LAGRANGIAN_QUANTIZATION], help="Quantization method")
+    parser.add_argument("--steps", type=int, default=100, help="Number of attack steps")
     parser.add_argument("--confidence", type=str, default=0, help="Attack confidence")
 
     args = vars(parser.parse_args())
 
     attack_df = attack(args)
 
-    output_filepath = os.path.join(args["output_dir"], f"{time.strftime('%Y_%m_%d')}_stl10_quantization_{args['quantization']}_confidence_{args['confidence']}.csv")
+    output_filepath = os.path.join(args["output_dir"], f"{time.strftime('%Y_%m_%d')}_stl10_quantization_{args['quantization']}_steps_{args['steps']}_confidence_{args['confidence']}.csv")
     print(f"Output file: \"{output_filepath}\"")
     attack_df.to_csv(output_filepath, index=False)
