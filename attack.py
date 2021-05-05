@@ -43,11 +43,11 @@ def attack(args):
     # Set up DDN attack with quantization
     attack = DDNQuantizationAttack(
         model_torch=net,
-        steps=500,
+        steps=100,
         quantization=args["quantization"],
         confidence=args["confidence"],
         preprocessing=lagrangian_quantization_preprocessing,
-        verbose=0,
+        verbose=1,
     )
 
     testloader = torch.utils.data.DataLoader(testset, batch_size=args["batch_size"], shuffle=False, num_workers=0)
@@ -115,13 +115,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=10, help="Batch size")
     parser.add_argument("--max_num_test_batches", type=int, default=10, help="Maximum number of test batches")
     parser.add_argument("--output_dir", type=str, default="./results", help="Where to store resulting data frame")
-    parser.add_argument("--quantization", type=str, default=NAIVE_ROUND, choices=[NAIVE_ROUND, LAGRANGIAN_QUANTIZATION], help="Quantization method")
+    parser.add_argument("--quantization", type=str, default=LAGRANGIAN_QUANTIZATION, choices=[NAIVE_ROUND, LAGRANGIAN_QUANTIZATION], help="Quantization method")
     parser.add_argument("--confidence", type=str, default=0, help="Attack confidence")
 
     args = vars(parser.parse_args())
 
     attack_df = attack(args)
 
-    output_filepath = os.path.join(args["output_dir"], f"{time.strftime('%Y_%m_%d')}_stl10_quantization_{args['quantization']}_confidence_{args['confidence']}_debug.csv")
+    output_filepath = os.path.join(args["output_dir"], f"{time.strftime('%Y_%m_%d')}_stl10_quantization_{args['quantization']}_confidence_{args['confidence']}.csv")
     print(f"Output file: \"{output_filepath}\"")
     attack_df.to_csv(output_filepath, index=False)

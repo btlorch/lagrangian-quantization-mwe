@@ -40,7 +40,7 @@ def distortion_based_quantization(x_org, x_adv):
     return x_quant
 
 
-def gradient_based_quantization(x_org, y_true, x_adv, model, preprocessing=None):
+def gradient_based_quantization(x_org, y_true, x_adv, model, preprocessing=None, y_target=None):
     """
     Gradient-based optimization: Strengthen the adversarial properties of the image
     :param x_org: original image with uint8 values in range [0., 255.], torch tensor of dtype float and shape [num_channels, height, width]
@@ -48,6 +48,7 @@ def gradient_based_quantization(x_org, y_true, x_adv, model, preprocessing=None)
     :param x_adv: image found by adversarial attack with arbitrary float values in range [0., 255.], torch tensor of dtype float
     :param model: PyTorch classifier
     :param preprocessing: transform for input preprocessing. Default is None.
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: quantized image with integer intensities in range [0., 255.], torch tensor of dtype float
     """
 
@@ -63,7 +64,7 @@ def gradient_based_quantization(x_org, y_true, x_adv, model, preprocessing=None)
         unquantized_perturbation)
 
     # Gradient of approximate loss w.r.t. inputs
-    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, preprocessing=preprocessing)
+    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, preprocessing=preprocessing, y_target=y_target)
 
     # Eq. (25): Minimize loss through approximation, which is a correlation over the pixels.
     # The quantization noise is q[j] = {ceil(u[j]), floor(u[j])} - u(j)
@@ -82,13 +83,14 @@ def gradient_based_quantization(x_org, y_true, x_adv, model, preprocessing=None)
     return x_quant
 
 
-def _eval_attack_loss(x_quant, y_true, model, preprocessing=None, confidence=0.):
+def _eval_attack_loss(x_quant, y_true, model, preprocessing=None, confidence=0., y_target=None):
     """
     Compute attack loss
     :param x_quant: test image of shape [num_channels, height, width] as torch tensor
     :param y_true: correct label
     :param model: PyTorch module
     :param preprocessing: transform that operates on a single image
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: attack loss as torch tensor. This loss is negative if the attack succeeded
     """
 
@@ -108,7 +110,8 @@ def _eval_attack_loss(x_quant, y_true, model, preprocessing=None, confidence=0.)
 
     # Eq. (23): argmax_{k \neq t(x_o)} p_a(k)
     # Obtain the class label where the attack aimed to drive the sample x_adv, with or without success
-    kappa_adv = _best_other_class(logits=y_pred_quant, y_true=y_true)
+    if y_target is None:
+        y_target = _best_other_class(logits=y_pred_quant, y_true=y_true)
 
     # Eq. (22): p_q := f( a( x_adv + q) )
     p_q = y_pred_quant
@@ -117,12 +120,12 @@ def _eval_attack_loss(x_quant, y_true, model, preprocessing=None, confidence=0.)
     # The loss is the difference between the predicted probability that x_quant belongs to the true class of x_o minus the one of a given class kappa_a.
     # If the loss is smaller than zero, the attack succeeded.
     # This loss is independent of whatever loss the original attack used.
-    L_q = p_q[y_true] - p_q[kappa_adv] + confidence
+    L_q = p_q[y_true] - p_q[y_target] + confidence
 
     return L_q
 
 
-def _obtain_gradient_approximation(y_true, x_adv, model, q=None, preprocessing=None, confidence=0.):
+def _obtain_gradient_approximation(y_true, x_adv, model, q=None, preprocessing=None, confidence=0., y_target=None):
     """
     Set up a loss function that encourages a misclassification. Obtain gradient w.r.t. input pixels by first-order approximation, which is a correlation over pixels.
     The first-order approximation is the Taylor expansion:
@@ -138,6 +141,7 @@ def _obtain_gradient_approximation(y_true, x_adv, model, q=None, preprocessing=N
     :param model: PyTorch classifier
     :param q: Approximate loss at position x_adv + q. If q is not given, q will be set to zero.
     :param preprocessing: transform that applies preprocessing if needed
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: gradient w.r.t. image pixels
     """
     # Clone x_adv to ensure it is a leaf variable
@@ -156,7 +160,7 @@ def _obtain_gradient_approximation(y_true, x_adv, model, q=None, preprocessing=N
 
     model.zero_grad()
 
-    L_q = _eval_attack_loss(x_quant=x_quant, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence)
+    L_q = _eval_attack_loss(x_quant=x_quant, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence, y_target=y_target)
 
     # Approximate loss using first-order Taylor expansion around (q = 0)
     # Eq. (24)
@@ -209,13 +213,14 @@ def _eval_approximate_attack_loss(unquantized_attack_loss, g, q):
     return unquantized_attack_loss + torch.sum(g * q)
 
 
-def _attack_succeeded(x_quant, y_true, model, preprocessing=None, confidence=0.):
+def _attack_succeeded(x_quant, y_true, model, preprocessing=None, confidence=0., y_target=None):
     """
     Check whether a given example is misclassified by the desired confidence
     :param x_quant: test image of shape [num_channels, height, width]
     :param y_true: correct label
     :param model: PyTorch module
     :param preprocessing: transform that operates on a single image
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: True if loss from adversarial attack is smaller than 0
     """
 
@@ -225,13 +230,14 @@ def _attack_succeeded(x_quant, y_true, model, preprocessing=None, confidence=0.)
             y_true=y_true,
             model=model,
             preprocessing=preprocessing,
-            confidence=confidence
+            confidence=confidence,
+            y_target=y_target,
         )
 
     return is_adv_loss < 0
 
 
-def lagrangian_quantization_with_lambda(x_org, y_true, x_adv, model, lambda_):
+def lagrangian_quantization_with_lambda(x_org, y_true, x_adv, model, lambda_, y_target=None):
     """
     Minimize a linear combination of the distortion and the classifier loss
     :param x_org: original image with uint8 values in range [0., 255.], torch tensor of dtype float and shape [num_channels, height, width]
@@ -239,6 +245,7 @@ def lagrangian_quantization_with_lambda(x_org, y_true, x_adv, model, lambda_):
     :param x_adv: image found by adversarial attack with arbitrary float values in range [0., 255.], torch tensor of dtype float
     :param model: PyTorch classifier
     :param lambda_: trade-off between distortion and classifier loss
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: quantized image with integer intensities in range [0., 255.], torch tensor of dtype float
     """
     # Eq. (2)
@@ -254,14 +261,14 @@ def lagrangian_quantization_with_lambda(x_org, y_true, x_adv, model, lambda_):
 
     # Set up attack loss and approximate gradient of loss w.r.t. inputs
     # See Eq. (24)
-    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model)
+    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, y_target=y_target)
 
     x_quant = _quantize_lagrangian(x_org=x_org, unquantized_perturbation=unquantized_perturbation, g=g, lambda_=lambda_)
 
     return x_quant
 
 
-def lagrangian_quantization(x_org, y_true, x_adv, model, binary_search_max_iter=100, preprocessing=None, confidence=0.):
+def lagrangian_quantization(x_org, y_true, x_adv, model, binary_search_max_iter=100, preprocessing=None, confidence=0., y_target=None):
     """
     Minimize a linear combination of the distortion and the classifier loss
     :param x_org: original image with uint8 values in range [0., 255.], torch tensor of dtype float and shape [num_channels, height, width]
@@ -271,6 +278,7 @@ def lagrangian_quantization(x_org, y_true, x_adv, model, binary_search_max_iter=
     :param binary_search_max_iter: maximum number of iterations to run for binary search over lambda
     :param preprocessing: transform for input preprocessing. Default is None.
     :param confidence: Desired confidence level (similar to confidence in C&W attack). Default is 0.
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: quantized image with integer intensities in range [0., 255.], torch tensor of dtype float
     """
 
@@ -284,7 +292,7 @@ def lagrangian_quantization(x_org, y_true, x_adv, model, binary_search_max_iter=
 
     # Set up attack loss and approximate gradient of loss w.r.t. inputs
     # See Eq. (24)
-    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, preprocessing=preprocessing)
+    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, preprocessing=preprocessing, y_target=y_target)
 
     # Define set of indices whose quantization depends on lambda
     # Eq. (29)
@@ -345,7 +353,7 @@ def lagrangian_quantization(x_org, y_true, x_adv, model, binary_search_max_iter=
     return x_quant
 
 
-def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget, was_prev_x_adv_successful, preprocessing=None, confidence=0., verbose=0, iteration=-1):
+def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget, was_prev_x_adv_successful, preprocessing=None, confidence=0., verbose=0, iteration=-1, y_target=None):
     """
     Minimize a linear combination of the distortion and the classifier loss
     :param x_org: original image with uint8 values in range [0., 255.], torch tensor of dtype float and shape [num_channels, height, width]
@@ -355,6 +363,7 @@ def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget
     :param perturbation_budget: maximum perturbation after quantization (squared sum of pixel changes)
     :param was_prev_x_adv_successful: boolean flag that indicates whether x_adv from the previous iteration was adversarial
     :param preprocessing: transform for input preprocessing. Default is None.
+    :param y_target: target label in case of targeted attack. None for untargeted attack.
     :return: quantized image with integer intensities in range [0., 255.], torch tensor of dtype float
     """
 
@@ -388,7 +397,7 @@ def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget
 
     # Set up attack loss and approximate gradient of loss w.r.t. inputs
     # See Eq. (24)
-    g = _obtain_gradient_approximation(y_true=y_true, x_adv=x_adv, model=model, preprocessing=preprocessing, confidence=confidence)
+    g = _obtain_gradient_approximation(y_true=y_true, y_target=y_target, x_adv=x_adv, model=model, preprocessing=preprocessing, confidence=confidence)
 
     # For some pixels, we round towards the original sample anyway.
     # This is the case when one quantization value minimizes both the distortion and the classifier loss.
@@ -479,6 +488,7 @@ def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget
             g=g,
             lambdas=r_sorted,
             y_true=y_true,
+            y_target=y_target,
             model=model,
             preprocessing=preprocessing,
             confidence=confidence,
@@ -501,7 +511,7 @@ def lagrangian_quantization_ddn(x_org, y_true, x_adv, model, perturbation_budget
     return x_quant
 
 
-def plot_attack_loss_vs_distortion(x_org, unquantized_perturbation, g, lambdas, y_true, model, selected_lambda, perturbation_budget_squared, preprocessing=None, confidence=0., iteration=-1, output_dir=None):
+def plot_attack_loss_vs_distortion(x_org, unquantized_perturbation, g, lambdas, y_true, model, selected_lambda, perturbation_budget_squared, preprocessing=None, confidence=0., iteration=-1, y_target=None, output_dir=None):
     import matplotlib.pyplot as plt
     from tqdm import tqdm
     import os
@@ -509,7 +519,7 @@ def plot_attack_loss_vs_distortion(x_org, unquantized_perturbation, g, lambdas, 
     # Evaluate true attack loss at unquantized x_adv
     x_adv = x_org + unquantized_perturbation
     with torch.no_grad():
-        unquantized_attack_loss = _eval_attack_loss(x_quant=x_adv, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence)
+        unquantized_attack_loss = _eval_attack_loss(x_quant=x_adv, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence, y_target=y_target)
 
     # Foolbox sums over square pixel differences (instead of averaging)
     x_adv_l2_distortion = torch.flatten(x_adv - x_org, start_dim=1).square().sum().sqrt().item()
@@ -534,7 +544,7 @@ def plot_attack_loss_vs_distortion(x_org, unquantized_perturbation, g, lambdas, 
 
         # Compute true attack loss
         with torch.no_grad():
-            true_attack_loss = _eval_attack_loss(x_quant=x_quant, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence).item()
+            true_attack_loss = _eval_attack_loss(x_quant=x_quant, y_true=y_true, model=model, preprocessing=preprocessing, confidence=confidence, y_target=y_target).item()
 
         # Compute approximate attack loss
         q = x_quant - x_adv

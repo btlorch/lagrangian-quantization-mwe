@@ -16,6 +16,7 @@ from foolbox.attacks.base import T
 from foolbox.attacks.base import raise_if_kwargs
 from tqdm import tqdm
 from lagrangian_quantization import lagrangian_quantization_ddn
+from criteria import TargetedMisclassificationWithGroundTruth
 
 
 from typing import Union, Tuple, Optional, Any
@@ -215,7 +216,18 @@ class DDNQuantizationAttack(MinimizationAttack):
                     # Lagrangian quantization expects images in range [0, 255]
                     x_org = x[img_idx].raw * 255
                     x_adv_unquantized = (x + delta)[img_idx].raw * 255
-                    y_true = criterion_.labels.raw[img_idx]
+
+                    # Get y_true and y_target for untargeted and targeted attacks
+                    y_target = None
+                    if isinstance(criterion_, Misclassification):
+                        y_true = criterion_.labels.raw[img_idx]
+
+                    elif isinstance(criterion_, TargetedMisclassificationWithGroundTruth):
+                        y_true = criterion_.ground_truth_classes.raw[img_idx]
+                        y_target = criterion_.target_classes.raw[img_idx]
+
+                    else:
+                        raise ValueError("Not implemented")
 
                     # Transform perturbation budget from images in [0, 1] to images in [0, 255]
                     transformed_perturbation_budget = perturbation_budget[img_idx].raw * 255
@@ -224,6 +236,7 @@ class DDNQuantizationAttack(MinimizationAttack):
                     x_quant = lagrangian_quantization_ddn(
                         x_org=x_org,
                         y_true=y_true,
+                        y_target=y_target,
                         x_adv=x_adv_unquantized,
                         model=self.model_torch,
                         perturbation_budget=transformed_perturbation_budget,
